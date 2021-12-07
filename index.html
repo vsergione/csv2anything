@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="en" class="h-100">
+<head>
+    <meta charset="UTF-8">
+    <title>CSV2Anything</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <link rel="stylesheet" type="text/css" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/css/bootstrap.min.css">
+    <style>
+        #rule{
+            width: 100%;
+        }
+
+        .footer {
+            background-color: #f5f5f5;
+        }
+    </style>
+</head>
+<body class="d-flex flex-column h-100">
+<main>
+    <div class="container mt-4">
+    <div class="row">
+        <div class="col">
+            <h4>CSV 2 anything</h4>
+            <div class="accordion" id="csv2anything">
+                <div class="card">
+                    <div class="card-header" id="importDialogHeader">
+                        <button class="btn btn-link" type="button" data-toggle="collapse" data-target="#importDialog" aria-expanded="true" aria-controls="collapseOne">
+                            Import CSV
+                        </button>
+                    </div>
+                    <div class="collapse show" id="importDialog" data-parent="#csv2anything">
+                        <div class="card-body text-center ">
+                            CSV File <input type="file" class="" id="file-selector" multiple> <input type="checkbox" id="hasheader" class="form-check-input"> <label for="hasheader">Has header</label>
+                            <input type="text" id="separator" value=";" size="3" class=""> <label for="separator">Separator</label>
+                            <input type="text" id="delimiter" value='"' size="3" class=""> <label for="delimiter">Delimiter</label>
+                            <br>
+                            <button onclick="loadCsv()" class="btn btn-primary">Load CSV</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="csvDataHeader">
+                        <button class="btn btn-link" type="button" data-toggle="collapse" data-target="#csvData" aria-expanded="true" aria-controls="collapseOne">
+                            CSV Content
+                        </button>
+                    </div>
+                    <div class="collapse" id="csvData" data-parent="#csv2anything">
+                        <div class="card-body" >
+                            <div class="mb-2">
+                                <label for="rule">Rule</label><br><textarea id="rule" placeholder="{{col_index1}} some text {{fld_name}} other text..." class="form-control" onkeyup="preview()"></textarea>
+                                <button onclick="generate()" class="btn btn-secondary">Generate</button>
+                            </div>
+                            <div >
+                                <div id="preview" class="alert alert-secondary"></div>
+                            </div>
+                            <div id="inputdata" style="max-height: 400px; overflow: auto;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header" id="resultsHeader">
+                        <button class="btn btn-link" type="button" data-toggle="collapse" data-target="#results" aria-expanded="true" aria-controls="collapseOne">
+                            Results
+                        </button>
+                    </div>
+                    <div class="collapse" id="results" data-parent="#csv2anything">
+                        <div class="card-body" style="max-height: 400px; overflow: auto" >
+                            <textarea id="output" class="form-control" style="height: 300px"></textarea>
+                            <button onclick="selectAndCopy()" class="btn btn-secondary">Select & copy</button>
+                            <button onclick="saveAs()" class="btn btn-secondary">Save as</button>
+                        </div>
+                    </div>
+                </div>
+
+
+            </div>
+        </div>
+    </div>
+</div>
+</main>
+<footer class="footer mt-auto py-3">
+    <div class="container">
+        <span class="text-muted">&copy; Softaccel Solutions 2021</span>
+    </div>
+</footer>
+
+<script src="https://code.jquery.com/jquery-3.6.0.min.js" integrity="sha256-/xUj+3OJU5yExlq6GSYGSHk7tPXikynS7ogEvDej/m4=" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const fileSelector = _('#file-selector');
+
+    function selectAndCopy() {
+        _("#output").focus();
+        _("#output").select();
+        document.execCommand("copy");
+    }
+
+    function saveAs( ) {
+        let filename = "new file.txt";
+        var file = new Blob([_("#output").value], {type: "text/plain"});
+        if (window.navigator.msSaveOrOpenBlob) // IE10+
+            window.navigator.msSaveOrOpenBlob(file, filename);
+        else { // Others
+            var a = document.createElement("a"),
+                url = URL.createObjectURL(file);
+            a.href = url;
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function() {
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+            }, 0);
+        }
+    }
+
+
+    function selectElementText(el, win) {
+        win = win || window;
+        var doc = win.document, sel, range;
+        if (win.getSelection && doc.createRange) {
+            sel = win.getSelection();
+            range = doc.createRange();
+            range.selectNodeContents(el);
+            sel.removeAllRanges();
+            sel.addRange(range);
+        } else if (doc.body.createTextRange) {
+            range = doc.body.createTextRange();
+            range.moveToElementText(el);
+            range.select();
+        }
+    }
+
+
+    function loadCsv() {
+        // fileSelector.files
+        const fileList = fileSelector.files;
+        if(!fileList.length) return;
+        readCsv(fileList[0]);
+    }
+
+    function _(sel) {
+
+        switch(sel.substr(0,1)) {
+            case "#":
+                return document.getElementById(sel.substr(1));
+                break;
+            case ".":
+                return document.getElementsByClassName(sel.substr(1));
+                break;
+            default:
+                return document.getElementsByTagName(sel);
+        }
+    }
+
+    function parseRule(str) {
+        let regex = /(\{\{(\w+)\}\})/g;
+        let vars = [];
+        let myArray;
+        let count = 10;
+        while ((myArray = regex.exec(str)) != null && count>0)
+        {
+            vars.push(myArray[2]);
+            count--;
+        }
+
+        return vars;
+    }
+
+    function generateLine(record,rule,fields) {
+        let line = rule;
+        fields.forEach(function (fld) {
+            let rgx = new RegExp("\\{\\{"+fld+"\\}\\}");
+            console.log(fld,rgx,record,record[fld]);
+            line = line.replace(rgx,record[fld]);
+        });
+        return line;
+    }
+
+    function preview() {
+        let rule = _("#rule").value;
+        let vars = parseRule(rule);
+        console.log(vars,rule);
+        $("#preview").html(generateLine(allRows[0],rule,vars));
+    }
+
+    function generate() {
+        let rule = _("#rule").value;
+        let fields = parseRule(rule);
+        let out = _("#output");
+        out.value = "";
+        allRows.forEach(function (record) {
+            out.value += generateLine(record,rule,fields)+"\n";
+        });
+        $("#results").collapse("show");
+    }
+
+    let allRows,header;
+
+    function strip(fld) {
+        // console.log(fld);
+        if(["'","\""].indexOf(fld.substr(0,1))!=-1) {
+            fld = fld.substr(1, fld.length - 2);
+        }
+        return fld;
+    }
+
+    function parseContent(data) {
+        let sep = _('#separator').value;
+        let del = _('#delimiter').value;
+        allRows = data.split(/\r?\n|\r/);
+        if(_("#hasheader").checked) {
+            header = allRows.shift().split(sep).map(strip);
+        }
+
+        let last;
+        for(let i=allRows.length-1;i>=0;i--) {
+            if(allRows[i]==="") {
+                allRows.splice(i,1);
+                continue;
+            }
+
+            let tmp = allRows[i].split(sep).map(strip) ;
+
+            last = tmp;
+            allRows[i] = {};
+            for(let j=0;j<tmp.length;j++) {
+                allRows[i][j] = tmp[j];
+                if(header)
+                    allRows[i][header[j]] = allRows[i][j];
+            }
+        }
+
+        if(!header && last) {
+            header = [];
+            for(let i=0;i<last.length;i++) {
+                header.push(i);
+            }
+        }
+
+        let table = "<table border='1' width='100%'>";
+        table += "<thead><tr>";
+        header.forEach((th)=>table +="<th>"+th+"</th>");
+        table +="</tr></thead>";
+
+        table+= "<tbody>";
+        allRows.forEach(function (row) {
+            table += "<tr>";
+            header.forEach((idx)=>table += "<td>" +row[idx] + "</td>");
+            table +="</tr>";
+        });
+        table+= "</tbody></table>";
+
+        _('#inputdata').innerHTML=table;
+    }
+
+    function readCsv(file) {
+        const reader = new FileReader();
+        reader.onload = (function(reader)
+        {
+            return function(e)
+            {
+                console.log(e);
+                parseContent(reader.result);
+                $("#csvData").collapse("show");
+
+            }
+        })(reader);
+
+        reader.readAsText(file);
+    }
+
+    _("#output").value = "";
+</script>
+
+</body>
+</html>
